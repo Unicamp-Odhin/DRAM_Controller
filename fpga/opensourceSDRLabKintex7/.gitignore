@@ -1,0 +1,21 @@
+digilent_arty.cache/
+digilent_arty.hw/
+digilent_arty.ip_user_files/
+.Xil/
+report/
+vivado_*.backup.*
+ip_project
+# Arquivos temporários e gerados
+ip/mig_7series_0/_tmp/
+ip/mig_7series_0/xil_txt.*
+ip/mig_7series_0/mig_7series_0.bmj
+ip/mig_7series_0/mig_7series_0_bmstub.v
+
+# Diretórios e arquivos gerados automaticamente
+ip/mig_7series_0/mig_7series_0/example_design/
+ip/mig_7series_0/mig_7series_0/user_design/
+ip/mig_7series_0/mig_7series_0/docs/
+ip/mig_7series_0/mig_7series_0/datasheet.txt
+
+# Simulação
+ip/mig_7series_0/mig_7series_0/example_design/sim/
