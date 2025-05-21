@@ -16,10 +16,8 @@ module async_fifo #(
     output logic [WIDTH-1:0] read_data_o    // dado lido
 );
 
-    // Cálculo da largura do ponteiro
     localparam PTR_WIDTH = $clog2(DEPTH);
 
-    // Memória FIFO (dual-port RAM implícita)
     logic [WIDTH-1:0] memory [0:DEPTH-1];
 
     // Ponteiros binários
@@ -32,12 +30,12 @@ module async_fifo #(
     logic [PTR_WIDTH-1:0] wr_ptr_gray_sync1, wr_ptr_gray_sync2;
     logic [PTR_WIDTH-1:0] rd_ptr_gray_sync1, rd_ptr_gray_sync2;
 
-    // Função binário para Gray
+
     function automatic logic [PTR_WIDTH-1:0] bin2gray(input logic [PTR_WIDTH-1:0] bin);
         bin2gray = (bin >> 1) ^ bin;
     endfunction
 
-    // Função Gray para binário
+
     function automatic logic [PTR_WIDTH-1:0] gray2bin(input logic [PTR_WIDTH-1:0] gray);
         integer i;
         begin

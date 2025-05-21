@@ -1,16 +1,12 @@
 read_verilog -sv main.sv
 read_verilog -sv ../../rtl/dram_controller.sv
+read_verilog -sv ../../rtl/async_fifo.sv
 
 
 # Adiciona o IP clk_wiz_0
 read_verilog ./ip/clk_wiz_0/clk_wiz_0_clk_wiz.v
 read_verilog ./ip/clk_wiz_0/clk_wiz_0.v
 read_xdc     ./ip/clk_wiz_0/clk_wiz_0.xdc
-
-# Adiciona o IP clk_wiz_1
-#read_verilog ./ip/clk_wiz_1/clk_wiz_1_clk_wiz.v
-#read_verilog ./ip/clk_wiz_1/clk_wiz_1.v
-#read_xdc     ./ip/clk_wiz_1/clk_wiz_1.xdc
 
 # Adiciona o IP mig_7series_0
 # RTL do MIG (user_design)
