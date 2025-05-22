@@ -1,5 +1,5 @@
 module top #(
-    parameter SYS_CLK_FREQ  = 50_000_000, // 50 MHz
+    parameter SYS_CLK_FREQ  = 50_000_000,  // 50 MHz
     parameter USER_CLK_FREQ = 100_000_000, // 100 MHz
     parameter REF_CLK_FREQ  = 200_000_000, // 200 MHz
     parameter DRAM_CLK_FREQ = 800_000_000, // 800 MHz
@@ -86,8 +86,15 @@ module top #(
         .ddr3_cke       (ddr3_cke),
         .ddr3_cs_n      (ddr3_cs_n),
         .ddr3_dm        (ddr3_dm),
-        .ddr3_odt       (ddr3_odt)
+        .ddr3_odt       (ddr3_odt),
+
+        .req_empty      (req),
+        .resp_empty     (resp),
+        .calib_done     (calib),
+        .app_ready      (ready)
     );
+
+    logic req, resp, calib, ready;
 
     typedef enum logic [2:0] {
         TST_IDLE,
@@ -100,7 +107,7 @@ module top #(
 
     test_state_t test_state = TST_IDLE;
     logic [15:0] delay_counter;
-    logic test_pass;
+    logic test_pass, test_fail;
 
     localparam TEST_VALUE = {WORD_SIZE{1'b10100101}}; // Padrão A5 repetido
     localparam logic [127:0] TEST_VALUE1 = {16{8'hA5}};
@@ -114,6 +121,7 @@ module top #(
             wb_data_i     <= 0;
             delay_counter <= 0;
             test_pass     <= 0;
+            test_fail     <= 0;
             test_state    <= TST_IDLE;
         end else begin
             case (test_state)
@@ -135,7 +143,7 @@ module top #(
                     end
                 end
                 TST_WAIT_WRITE: begin
-                    if (delay_counter == 5000) begin
+                    if (delay_counter >= 5000) begin
                         wb_stb     <= 1;
                         wb_cyc     <= 1;
                         wb_we      <= 0;
@@ -152,8 +160,13 @@ module top #(
                     end
                 end
                 TST_CHECK: begin
-                    if (wb_data_o == TEST_VALUE)
+                    if (wb_data_o == TEST_VALUE) begin
                         test_pass <= 1;
+                        test_fail <= 0;
+                    end else begin
+                        test_pass <= 0;
+                        test_fail <= 1;
+                    end
                     test_state <= TST_CHECK;
                 end
                 default: test_state <= TST_IDLE;
@@ -165,7 +178,7 @@ module top #(
         if (!rst_n) begin
             led <= 8'b0;
         end else begin
-            led <= {7'b0, test_pass};
+            led <= {test_fail, ready, resp, 1'b0, calib, req ,1'b0, test_pass};
         end
     end
 

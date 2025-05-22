@@ -5,22 +5,21 @@ module DRAM_Controller #(
     parameter WORD_SIZE     = 128
 ) (
     // System clk interface
-    input  logic                   user_clk_i,     // User clk - 100_000_000
+    input  logic                   user_clk_i,
     input  logic                   rst_n_i,
     
     // Wishbone Interface
-    input  logic                   cyc_i,          // Wishbone cycle indicator
-    input  logic                   stb_i,          // Wishbone strobe (request)
-    input  logic                   we_i,           // Write enable
-
-    input  logic [31:0]            addr_i,         // Address input
-    input  logic [WORD_SIZE - 1:0] data_i,         // Data input (for write)
-    output logic [WORD_SIZE - 1:0] data_o,         // Data output (for read)
-    output logic                   ack_o,          // Acknowledge output
+    input  logic                   cyc_i,
+    input  logic                   stb_i,
+    input  logic                   we_i,
+    input  logic [31:0]            addr_i,
+    input  logic [WORD_SIZE - 1:0] data_i,
+    output logic [WORD_SIZE - 1:0] data_o,
+    output logic                   ack_o,
 
     // DRAM clk interface
-    input  logic                   ddr3_clk_i,     // DDR3 clock
-    input  logic                   ddr3_ref_clk_i, // DDR3 reference clock
+    input  logic                   ddr3_clk_i,
+    input  logic                   ddr3_ref_clk_i,
 
     // DRAM interface
     inout  logic [31:0]            ddr3_dq,
@@ -37,14 +36,20 @@ module DRAM_Controller #(
     output logic [0:0]             ddr3_cke,
     output logic [0:0]             ddr3_cs_n,
     output logic [3:0]             ddr3_dm,
-    output logic [0:0]             ddr3_odt
+    output logic [0:0]             ddr3_odt,
 
+    output logic req_empty,
+    output logic resp_empty,
+    output logic calib_done,
+    output logic app_ready
 );
+
     logic rst_n;
     assign rst_n = rst_n_i;
 
     logic ui_clk, ui_clk_sync_rst;
-    logic calib_done;
+    //logic calib_done;
+    assign app_ready = app_rdy;
 
     typedef struct packed {
         logic         we;
@@ -64,9 +69,12 @@ module DRAM_Controller #(
     logic  resp_fifo_full, resp_fifo_empty;
     logic  resp_fifo_wr_en, resp_fifo_rd_en;
 
+    assign req_empty  = req_fifo_empty;
+    assign resp_empty = resp_fifo_empty;
+
     // Async FIFOs
     async_fifo #(
-        .DEPTH        (32), 
+        .DEPTH        (32),
         .WIDTH        ($bits(req_t))
     ) request_fifo (
         .clk_wr       (user_clk_i),
@@ -95,21 +103,19 @@ module DRAM_Controller #(
         .empty_o      (resp_fifo_empty)
     );
 
-    // Wishbone FSM (user_clk)
-    typedef enum logic [1:0] {
+    // FSM - Wishbone
+    typedef enum logic [1:0] { 
         WB_IDLE,
         WB_REQ,
         WB_WAIT_RESP,
         WB_ACK
     } wb_state_t;
-
+    
     wb_state_t wb_state, wb_next;
 
     always_ff @(posedge user_clk_i or negedge rst_n) begin
-        if (!rst_n) 
-            wb_state <= WB_IDLE;
-        else
-            wb_state <= wb_next;
+        if (!rst_n) wb_state <= WB_IDLE;
+        else        wb_state <= wb_next;
     end
 
     always_comb begin
@@ -121,22 +127,21 @@ module DRAM_Controller #(
         data_o          = 0;
 
         case (wb_state)
-            WB_IDLE: begin
-                if (cyc_i && stb_i && !req_fifo_full) begin
-                    wb_next = WB_REQ;
-                end
-            end
+            WB_IDLE:
+                if (cyc_i && stb_i && !req_fifo_full) wb_next = WB_REQ;
+
             WB_REQ: begin
                 req_fifo_wdata = '{we: we_i, addr: addr_i, data: data_i};
                 req_fifo_wr_en = 1;
                 wb_next        = we_i ? WB_ACK : WB_WAIT_RESP;
             end
-            WB_WAIT_RESP: begin
+
+            WB_WAIT_RESP:
                 if (!resp_fifo_empty) begin
                     resp_fifo_rd_en = 1;
                     wb_next         = WB_ACK;
                 end
-            end
+
             WB_ACK: begin
                 ack_o  = 1;
                 data_o = resp_fifo_rdata.data;
@@ -145,22 +150,19 @@ module DRAM_Controller #(
         endcase
     end
 
-    // MIG FSM (ui_clk)
+    // FSM - MIG
     typedef enum logic [2:0] {
         MIG_IDLE,
         MIG_READ,
         MIG_WRITE,
-        MIG_WAIT_RD,
-        MIG_RESP
+        MIG_WAIT_RD
     } mig_state_t;
-
+    
     mig_state_t mig_state, mig_next;
 
     always_ff @(posedge ui_clk or posedge ui_clk_sync_rst) begin
-        if (ui_clk_sync_rst) 
-            mig_state <= MIG_IDLE;
-        else                 
-            mig_state <= mig_next;
+        if (ui_clk_sync_rst) mig_state <= MIG_IDLE;
+        else                 mig_state <= mig_next;
     end
 
     logic [28:0] app_addr;
@@ -168,9 +170,11 @@ module DRAM_Controller #(
     logic        app_en, app_wdf_end, app_wdf_wren;
     logic [WORD_SIZE-1:0] app_wdf_data, app_rd_data;
     logic        app_rd_data_valid, app_rdy, app_wdf_rdy;
+    logic        app_rd_data_end;
+    logic        app_sr_active, app_ref_ack, app_zq_ack;
 
     assign app_wdf_end  = 1'b1;
-    assign app_addr     = req_fifo_rdata.addr[31:3];
+    assign app_addr     = req_fifo_rdata.addr[31:4]; // 128-bit alignment
     assign app_wdf_data = req_fifo_rdata.data;
     assign app_cmd      = (mig_state == MIG_READ) ? 3'b001 : 3'b000;
 
@@ -183,39 +187,37 @@ module DRAM_Controller #(
         resp_fifo_wdata = '{default:0};
 
         case (mig_state)
-            MIG_IDLE: begin
+            MIG_IDLE:
                 if (calib_done && !req_fifo_empty) begin
-                    if (req_fifo_rdata.we) mig_next = MIG_WRITE;
-                    else                   mig_next = MIG_READ;
+                    mig_next = req_fifo_rdata.we ? MIG_WRITE : MIG_READ;
                 end
-            end
-            MIG_WRITE: begin
+
+            MIG_WRITE:
                 if (app_rdy && app_wdf_rdy) begin
                     app_en         = 1;
                     app_wdf_wren   = 1;
                     req_fifo_rd_en = 1;
                     mig_next       = MIG_IDLE;
                 end
-            end
-            MIG_READ: begin
+
+            MIG_READ:
                 if (app_rdy) begin
                     app_en         = 1;
                     req_fifo_rd_en = 1;
                     mig_next       = MIG_WAIT_RD;
                 end
-            end
-            MIG_WAIT_RD: begin
+
+            MIG_WAIT_RD:
                 if (app_rd_data_valid) begin
                     resp_fifo_wdata.data = app_rd_data;
                     resp_fifo_wr_en      = 1;
                     mig_next             = MIG_IDLE;
                 end
-            end
         endcase
     end
 
+    // MIG Instanciação
     mig_7series_0 mig_7series_0_inst (
-        // Memory signals
         .ddr3_dq             (ddr3_dq),
         .ddr3_dqs_n          (ddr3_dqs_n),
         .ddr3_dqs_p          (ddr3_dqs_p),
@@ -228,18 +230,16 @@ module DRAM_Controller #(
         .ddr3_ck_p           (ddr3_ck_p),
         .ddr3_ck_n           (ddr3_ck_n),
         .ddr3_cke            (ddr3_cke),
-
         .ddr3_cs_n           (ddr3_cs_n),
         .ddr3_dm             (ddr3_dm),
         .ddr3_odt            (ddr3_odt),
 
-        // Application signals
         .app_addr            (app_addr),
         .app_cmd             (app_cmd),
         .app_en              (app_en),
         .app_wdf_data        (app_wdf_data),
         .app_wdf_end         (app_wdf_end),
-        .app_wdf_mask        (32'd0),
+        .app_wdf_mask        ({(WORD_SIZE/8){1'b0}}), // Corrigido para 16 bits
         .app_wdf_wren        (app_wdf_wren),
         .app_rd_data         (app_rd_data),
         .app_rd_data_end     (app_rd_data_end),
@@ -251,12 +251,10 @@ module DRAM_Controller #(
         .app_zq_req          ('b0),
         .app_sr_active       (app_sr_active),
         .app_ref_ack         (app_ref_ack),
-        .app_zq_ack          (app_zq_ac),
+        .app_zq_ack          (app_zq_ack),
 
         .ui_clk              (ui_clk),
         .ui_clk_sync_rst     (ui_clk_sync_rst),
-
-        // Sys signals
         .sys_clk_i           (ddr3_clk_i),
         .clk_ref_i           (ddr3_ref_clk_i),
         .init_calib_complete (calib_done),
