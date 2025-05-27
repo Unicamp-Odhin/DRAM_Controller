@@ -15,7 +15,7 @@ read_verilog -v [glob ./ip/mig_7series_0/mig_7series_0/user_design/rtl/**/*.v]
 
 read_xdc ./ip/mig_7series_0/mig_7series_0/user_design/constraints/mig_7series_0.xdc
 read_xdc ./ip/mig_7series_0/mig_7series_0/user_design/constraints/mig_7series_0_ooc.xdc
-read_xdc ./ip/mig_7series_0/mig_7series_0/user_design/constraints/compatible_ucf/xc7k325tiffg676_pkg.xdc
+#read_xdc ./ip/mig_7series_0/mig_7series_0/user_design/constraints/compatible_ucf/xc7k325tiffg676_pkg.xdc
 
 read_xdc "pinout.xdc"
 

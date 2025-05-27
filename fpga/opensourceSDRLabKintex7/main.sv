@@ -37,14 +37,14 @@ module top #(
     logic [WORD_SIZE-1:0] wb_data_o;
     logic        wb_ack;
 
-    logic ddr3_clk, ddr3_ref_clk, user_clk;
+    logic ddr3_clk, ddr3_ref_clk, user_clk, locked;
 
     clk_wiz_0 clk_wiz_0_inst (
         .clk_out1 (ddr3_clk),     // DDR3 clock - 800 MHz
         .clk_out2 (ddr3_ref_clk), // DDR3 reference clock - 200 MHz
         .clk_out3 (user_clk),     // User clock - 100 MHz
         .resetn   (rst_n),        // Active low reset
-        .locked   (),             // Locked signal
+        .locked   (locked),             // Locked signal
         .clk_in1  (sys_clk)       // System clock - 50 MHz
     );
 
@@ -86,15 +86,8 @@ module top #(
         .ddr3_cke       (ddr3_cke),
         .ddr3_cs_n      (ddr3_cs_n),
         .ddr3_dm        (ddr3_dm),
-        .ddr3_odt       (ddr3_odt),
-
-        .req_empty      (req),
-        .resp_empty     (resp),
-        .calib_done     (calib),
-        .app_ready      (ready)
+        .ddr3_odt       (ddr3_odt)
     );
-
-    logic req, resp, calib, ready;
 
     typedef enum logic [2:0] {
         TST_IDLE,
@@ -111,6 +104,15 @@ module top #(
 
     localparam TEST_VALUE = {WORD_SIZE{1'b10100101}}; // Padrão A5 repetido
     localparam logic [127:0] TEST_VALUE1 = {16{8'hA5}};
+    localparam logic [127:0] TEST_VALUE2 = {16{8'h5A}};
+    localparam logic [127:0] TEST_VALUE3 = {16{8'hFF}};
+    localparam logic [127:0] TEST_VALUE4 = {16{8'h00}};
+    localparam logic [127:0] TEST_VALUE5 = {16{8'hF0}};
+    localparam logic [127:0] TEST_VALUE6 = {16{8'h0F}};
+    localparam logic [127:0] TEST_VALUE7 = {16{8'hAA}};
+    localparam logic [127:0] TEST_VALUE8 = {16{8'h55}};
+    localparam logic [127:0] TEST_VALUE9 = 128'hAABB_CCDD_EEFF_0011_2233_4455_6677_8899;
+
 
     always_ff @(posedge user_clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -126,7 +128,7 @@ module top #(
         end else begin
             case (test_state)
                 TST_IDLE: begin
-                    wb_data_i  <= TEST_VALUE;
+                    wb_data_i  <= TEST_VALUE9;
                     wb_addr    <= 32'h00000000;
                     wb_we      <= 1;
                     wb_stb     <= 1;
@@ -160,7 +162,7 @@ module top #(
                     end
                 end
                 TST_CHECK: begin
-                    if (wb_data_o == TEST_VALUE) begin
+                    if (wb_data_o == TEST_VALUE9) begin
                         test_pass <= 1;
                         test_fail <= 0;
                     end else begin
@@ -178,7 +180,7 @@ module top #(
         if (!rst_n) begin
             led <= 8'b0;
         end else begin
-            led <= {test_fail, ready, resp, 1'b0, calib, req ,1'b0, test_pass};
+            led <= {test_fail, 6'h00, test_pass};
         end
     end
 
